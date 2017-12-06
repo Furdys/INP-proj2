@@ -49,9 +49,10 @@ end cpu;
 architecture behavioral of cpu is
 
 	-- Program counter signals --
-	signal pc_reg: std_logic_vector(11 downto 0);
-	signal pc_inc: std_logic;
-	--signal pc_dec: std_logic;
+	signal pcVal: std_logic_vector(11 downto 0);
+	signal pcInc: std_logic;
+--	signal pc_dec: std_logic;
+	signal pcValLoopStart: std_logic_vector(11 downto 0);
 
 	-- Pointer signals --
 --	signal ptr_reg: std_logic_vector(9 downto 0);
@@ -78,8 +79,13 @@ architecture behavioral of cpu is
 		ST_end,
 		ST_fetch,
 		ST_decode,
-		ST_dataINC,
-		ST_print
+		ST_dataInc,
+		ST_dataDec,
+		ST_print,
+		ST_loopBegin,
+		ST_loopSkip,
+		ST_loopSkipWait,
+		ST_loopEnd
 	);
 	signal presentState: state_t;
 	signal nextState: state_t;
@@ -90,14 +96,14 @@ begin
 	-- Program counter --
 	pc: process(RESET, CLK)
 	begin
-                CODE_ADDR <= pc_reg;
+		CODE_ADDR <= pcVal;
                 
 		if RESET = '1' then
-			pc_reg <= (others => '0');
+			pcVal <= (others => '0');
 
 		elsif rising_edge(CLK)  then
-			if pc_inc = '1' then
-				pc_reg <= pc_reg + 1;
+			if pcInc = '1' then
+				pcVal <= pcVal + 1;
 			end if;
 		end if;
 	end process;
@@ -130,63 +136,127 @@ begin
 
 
 	-- Finite state machine --
-	finiteStateMachine: process(presentState, OUT_BUSY)
+	finiteStateMachine: process(presentState, OUT_BUSY, DATA_RDATA, instruction)
 	begin
 		CODE_EN <= '0';
 		DATA_EN <= '0';
 		IN_REQ <= '0';
-                OUT_WE <= '0';
+		OUT_WE <= '0';
 
-		pc_inc <= '0';
---		ptr_inc <= '0';
---		ptr_dec <= '0';
+		pcInc <= '0';
 
 		nextState <= ST_fetch;
 
 		case presentState is
+			-- Fetch Instruction (load on CODE_DATA) --
 			when ST_fetch =>
 				nextState <= ST_decode;			
 				CODE_EN <= '1';
-
+				
+			-- Decode Instruction (determinate next action) --
 			when ST_decode =>
 				case instruction is
+					when INS_end =>
+						nextState <= ST_end;				
+		
 					when INS_dataInc =>
 						DATA_EN <= '1';
 						DATA_RDWR <= '0';
 						nextState <= ST_dataInc;
 						
+					when INS_dataDec =>
+						DATA_EN <= '1';
+						DATA_RDWR <= '0';
+						nextState <= ST_dataDec;	
+											
 					when INS_print =>
                         DATA_EN <= '1';
 						DATA_RDWR <= '0';
 						nextState <= ST_print;
+					
+					when INS_loopBegin =>
+						DATA_EN <= '1';
+						DATA_RDWR <= '0';
+						nextState <= ST_loopBegin;			
 						
-					when INS_end =>
-						nextState <= ST_end;
+					when INS_loopEnd =>
+						DATA_EN <= '1';
+						DATA_RDWR <= '0';
+						nextState <= ST_loopEnd;				
+
                                                 
-					when others => pc_inc <= '1';
+					when others => pcInc <= '1';
 				end case;
 
+			-- Data Incerement (symbol '+') --
 			when ST_dataInc =>
-                pc_inc <= '1';
+                pcInc <= '1';
                         
-				DATA_WDATA <= DATA_RDATA + 1;
-				DATA_RDWR <= '1';
 				DATA_EN <= '1';
+				DATA_RDWR <= '1';
+				DATA_WDATA <= DATA_RDATA + 1;
+                                
+				nextState <= ST_fetch;
+			
+			-- Data Decerement (symbol '-') --
+			when ST_dataDec =>
+                pcInc <= '1';
+                        
+                DATA_EN <= '1';   
+                DATA_RDWR <= '1';     
+				DATA_WDATA <= DATA_RDATA - 1;
                                 
 				nextState <= ST_fetch;
 
+			-- Character print (symbol '.') --
 			when ST_print =>
 				if OUT_BUSY = '0' then
-					pc_inc <= '1';
+					pcInc <= '1';
 
 					OUT_DATA <= DATA_RDATA;
 					OUT_WE <= '1';
 
 					nextState <= ST_fetch;
 				end if;
+
+			-- Beginning of loop cycle (symbol '[') --
+			when ST_loopBegin =>
+				pcInc <= '1';
 				
-                        when others =>
-                                nextState <= ST_end;
+				if DATA_RDATA = 0 then
+					pcValLoopStart <= pcVal;
+					nextState <= ST_loopSkipWait;
+				else
+					nextState <= ST_fetch;
+				end if;
+			
+			-- Skipping instructions inside loop (while symbol ']' is found) --		
+			when ST_loopSkip =>
+				if instruction = INS_loopEnd then
+					nextState <= ST_loopEnd;
+				else
+					pcInc <= '1';
+					nextState <= ST_loopSkipWait;
+				end if;
+				
+			-- Loading instruction for skipping inside loop --	
+			when ST_loopSkipWait =>
+				CODE_EN <= '1';
+				nextState <= ST_loopSkip;
+
+			when ST_loopEnd =>
+				pcInc <= '1';
+				nextState <= ST_fetch;
+--				if DATA_RDATA = 0 then	-- End cycle
+--					pcInc <= '1';
+--					nextState <= ST_fetch;
+--				else	-- Run cycle again
+--					pcVal <= pcValLoopStart;
+--					nextState <= ST_fetch;
+--				end if;
+				
+			when others =>
+					nextState <= ST_end;
 		end case;   
 	end process;
 
