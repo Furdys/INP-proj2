@@ -48,11 +48,188 @@ end cpu;
 -- ----------------------------------------------------------------------------
 architecture behavioral of cpu is
 
- -- zde dopiste potrebne deklarace signalu
+	-- Program counter signals --
+	signal pc_reg: std_logic_vector(11 downto 0);
+	signal pc_inc: std_logic;
+	--signal pc_dec: std_logic;
 
+	-- Pointer signals --
+--	signal ptr_reg: std_logic_vector(9 downto 0);
+--	signal ptr_inc: std_logic;
+--	signal ptr_dec: std_logic;
+
+	-- Instructions --
+	type instructions_t is (
+		INS_ptrInc,
+		INS_ptrDec,
+		INS_dataInc,
+		INS_dataDec,
+		INS_loopBegin,
+		INS_loopEnd,
+		INS_print,
+		INS_read,
+		INS_loopBreak,
+		INS_end
+	);
+	signal instruction: instructions_t;
+
+	-- FSM states ---
+	type state_t is (
+		ST_end,
+		ST_fetch,
+		ST_decode,
+		ST_dataINC,
+		ST_print
+	);
+	signal presentState: state_t;
+	signal nextState: state_t;
+	
 begin
+        
 
- -- zde dopiste vlastni VHDL kod
+	-- Program counter --
+	pc: process(RESET, CLK)
+	begin
+                CODE_ADDR <= pc_reg;
+                
+		if RESET = '1' then
+			pc_reg <= (others => '0');
+
+		elsif rising_edge(CLK)  then
+			if pc_inc = '1' then
+				pc_reg <= pc_reg + 1;
+			end if;
+		end if;
+	end process;
+
+	-- Program counter --
+	--ptr: process(RESET, CLK)
+	--begin
+	--if RESET = '1' then
+	--ptr_reg <= (others=>'0');
+	--
+	--elsif rising_edge(CLK)  then
+	--if ptr_inc = '1' and ptr_dec = '0' then
+	--ptr_reg <= ptr_reg + 1;
+	--elsif ptr_inc = '0' and ptr_dec = '1' then
+	--ptr_reg <= ptr_reg - 1;
+	--end if;
+	--end if;
+	--end process;
+
+
+	-- Finite state machine update --
+	updateState: process(CLK, EN)
+	begin
+		if RESET = '1' then
+			presentState <= ST_fetch;
+		elsif rising_edge(CLK) and EN = '1' then
+			presentState <= nextState;
+		end if;
+	end process;
+
+
+	-- Finite state machine --
+	finiteStateMachine: process(presentState, OUT_BUSY)
+	begin
+		CODE_EN <= '0';
+		DATA_EN <= '0';
+		IN_REQ <= '0';
+                OUT_WE <= '0';
+
+		pc_inc <= '0';
+--		ptr_inc <= '0';
+--		ptr_dec <= '0';
+
+		nextState <= ST_fetch;
+
+		case presentState is
+			when ST_fetch =>
+				nextState <= ST_decode;			
+				CODE_EN <= '1';
+
+			when ST_decode =>
+				case instruction is
+					when INS_dataInc =>
+						DATA_EN <= '1';
+						DATA_RDWR <= '0';
+						nextState <= ST_dataInc;
+						
+					when INS_print =>
+                        DATA_EN <= '1';
+						DATA_RDWR <= '0';
+						nextState <= ST_print;
+						
+					when INS_end =>
+						nextState <= ST_end;
+                                                
+					when others => pc_inc <= '1';
+				end case;
+
+			when ST_dataInc =>
+                pc_inc <= '1';
+                        
+				DATA_WDATA <= DATA_RDATA + 1;
+				DATA_RDWR <= '1';
+				DATA_EN <= '1';
+                                
+				nextState <= ST_fetch;
+
+			when ST_print =>
+				if OUT_BUSY = '0' then
+					pc_inc <= '1';
+
+					OUT_DATA <= DATA_RDATA;
+					OUT_WE <= '1';
+
+					nextState <= ST_fetch;
+				end if;
+				
+                        when others =>
+                                nextState <= ST_end;
+		end case;   
+	end process;
+
+	-- Instruction decoder
+	decoder: process(CODE_DATA)
+	begin
+		case CODE_DATA(7 downto 4) is
+			when X"0" =>
+				if CODE_DATA(3 downto 0) = X"0" then
+					instruction <= INS_end;	-- null
+				end if;
+
+			when X"2" =>
+				case CODE_DATA(3 downto 0) is
+					when X"B" => instruction <= INS_dataInc;	-- +
+					when X"D" => instruction <= INS_dataDec;	-- -
+					when X"E" => instruction <= INS_print;	-- .
+					when X"C" => instruction <= INS_read;	-- ,
+					when others =>
+				end case;
+
+			when X"3" =>
+				case CODE_DATA(3 downto 0) is
+					when X"E" => instruction <= INS_ptrInc;	-- >
+					when X"C" => instruction <= INS_ptrDec;	-- <
+					when others =>
+				end case;
+
+			when X"5" =>
+				case CODE_DATA(3 downto 0) is
+					when X"B" => instruction <= INS_loopBegin;	-- [
+					when X"D" => instruction <= INS_loopEnd;	-- ]
+					when others =>
+				end case;
+
+			when X"7" =>
+				if CODE_DATA(3 downto 0) = X"E" then
+					instruction <= INS_loopBreak;	-- ~
+				end if;
+
+			when others =>
+		end case;
+	end process;
 
 end behavioral;
  
