@@ -59,6 +59,8 @@ architecture behavioral of cpu is
 	signal ptrVal: std_logic_vector(9 downto 0);
 	signal ptrInc: std_logic;
 	signal ptrDec: std_logic;
+	
+	signal loopBreak: std_logic := '0';
 
 	-- Instructions --
 	type instructions_t is (
@@ -199,6 +201,9 @@ begin
 						DATA_RDWR <= '0';
 						nextState <= FSM_loopEnd;				
 
+					when INS_loopBreak =>
+						loopBreak <= '1';
+						nextState <= FSM_loopSkipWait;
                                                 
 					when others => pcInc <= '1';
 				end case;
@@ -252,32 +257,41 @@ begin
 
 			-- Beginning of loop cycle (symbol '[') --
 			when FSM_loopBegin =>
-				pcInc <= '1';			
-				
 				if DATA_RDATA = 0 then
 					nextState <= FSM_loopSkipWait;
 				else
+					pcInc <= '1';	
 					pcValLoopStart <= pcVal;
 					nextState <= FSM_fetch;
 				end if;
 			
 			-- Skipping instructions inside loop (while symbol ']' is found) --		
 			when FSM_loopSkip =>
-				if instruction = INS_loopEnd then
+				if instruction = INS_loopEnd then	
 					nextState <= FSM_loopEnd;
 				else
-					pcInc <= '1';
 					nextState <= FSM_loopSkipWait;
 				end if;
 				
 			-- Loading instruction for skipping inside loop --	
 			when FSM_loopSkipWait =>
+				pcInc <= '1';
+				
 				CODE_EN <= '1';
+				
 				nextState <= FSM_loopSkip;
 
+			-- Ending of loop cycle (symbol ']') --
 			when FSM_loopEnd =>
-				if DATA_RDATA = 0 then	-- End cycle
-					pcInc <= '1';
+				if DATA_RDATA = 0 or loopBreak = '1' then	-- End cycle
+					if loopBreak = '1' then
+						pcInc <= '0'; -- No idea why, just don't ask...
+					else
+						pcInc <= '1';
+					end if;
+					
+					loopBreak <= '0';
+					
 					nextState <= FSM_fetch;
 				else	-- Run cycle again
 					pcValSet <= '1';
