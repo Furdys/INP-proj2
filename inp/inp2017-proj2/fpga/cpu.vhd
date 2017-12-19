@@ -56,9 +56,9 @@ architecture behavioral of cpu is
 	signal pcValLoopStart: std_logic_vector(11 downto 0);
 
 	-- Pointer signals --
---	signal ptr_reg: std_logic_vector(9 downto 0);
---	signal ptr_inc: std_logic;
---	signal ptr_dec: std_logic;
+	signal ptrVal: std_logic_vector(9 downto 0);
+	signal ptrInc: std_logic;
+	signal ptrDec: std_logic;
 
 	-- Instructions --
 	type instructions_t is (
@@ -83,6 +83,8 @@ architecture behavioral of cpu is
 		FSM_dataInc,
 		FSM_dataDec,
 		FSM_print,
+		FSM_ptrInc,
+		FSM_ptrDec,
 		FSM_loopBegin,
 		FSM_loopSkip,
 		FSM_loopSkipWait,
@@ -92,8 +94,6 @@ architecture behavioral of cpu is
 	signal nextState: state_t;
 	
 begin
-        
-
 	-- Program counter --
 	pc: process(RESET, CLK)
 	begin
@@ -111,20 +111,22 @@ begin
 		end if;
 	end process;
 
+
 	-- Program counter --
-	--ptr: process(RESET, CLK)
-	--begin
-	--if RESET = '1' then
-	--ptr_reg <= (others=>'0');
-	--
-	--elsif rising_edge(CLK)  then
-	--if ptr_inc = '1' and ptr_dec = '0' then
-	--ptr_reg <= ptr_reg + 1;
-	--elsif ptr_inc = '0' and ptr_dec = '1' then
-	--ptr_reg <= ptr_reg - 1;
-	--end if;
-	--end if;
-	--end process;
+	ptr: process(RESET, CLK)
+	begin
+		DATA_ADDR <= ptrVal;
+	
+		if RESET = '1' then
+			ptrVal <= (others=>'0');
+		elsif rising_edge(CLK)  then
+			if ptrInc = '1' and ptrDec = '0' then
+				ptrVal <= ptrVal + 1;
+			elsif ptrInc = '0' and ptrDec = '1' then
+				ptrVal <= ptrVal - 1;
+			end if;
+		end if;
+	end process;
 
 
 	-- Finite state machine update --
@@ -146,8 +148,11 @@ begin
 		IN_REQ <= '0';
 		OUT_WE <= '0';
 
-		pcInc <= '0';
+		pcInc <= '0';	-- @todo Default value is 1, change when should be 0
 		pcValSet <= '0';
+		
+		ptrInc <= '0';
+		ptrDec <= '0';
 
 		nextState <= FSM_fetch;
 
@@ -177,6 +182,12 @@ begin
                         DATA_EN <= '1';
 						DATA_RDWR <= '0';
 						nextState <= FSM_print;
+
+					when INS_ptrInc =>
+						nextState <= FSM_ptrInc;
+					
+					when INS_ptrDec =>
+						nextState <= FSM_ptrDec;
 					
 					when INS_loopBegin =>
 						DATA_EN <= '1';
@@ -222,15 +233,31 @@ begin
 
 					nextState <= FSM_fetch;
 				end if;
+				
+			-- Pointer Incerement (symbol '>') --
+			when FSM_ptrInc =>
+				pcInc <= '1';
+				
+				ptrInc <= '1';
+				
+				nextState <= FSM_fetch;
+			
+			-- Pointer Decerement (symbol '<') --
+			when FSM_ptrDec =>
+				pcInc <= '1';
+				
+				ptrDec <= '1';
+				
+				nextState <= FSM_fetch;
 
 			-- Beginning of loop cycle (symbol '[') --
 			when FSM_loopBegin =>
-				pcInc <= '1';
+				pcInc <= '1';			
 				
 				if DATA_RDATA = 0 then
-					pcValLoopStart <= pcVal;
 					nextState <= FSM_loopSkipWait;
 				else
+					pcValLoopStart <= pcVal;
 					nextState <= FSM_fetch;
 				end if;
 			
