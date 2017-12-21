@@ -98,7 +98,7 @@ architecture behavioral of cpu is
 	
 begin
 	-- Program counter --
-	pc: process(RESET, CLK)
+	pc: process(RESET, CLK, pcInc, pcVal, pcValLoopStart)
 	begin
 		CODE_ADDR <= pcVal;
                 
@@ -116,7 +116,7 @@ begin
 
 
 	-- Program counter --
-	ptr: process(RESET, CLK)
+	ptr: process(RESET, CLK, ptrVal, ptrInc, ptrDec)
 	begin
 		DATA_ADDR <= ptrVal;
 	
@@ -133,7 +133,7 @@ begin
 
 
 	-- Finite state machine update --
-	updateState: process(CLK, EN)
+	updateState: process(CLK, EN, nextState)
 	begin
 		if RESET = '1' then
 			presentState <= FSM_fetch;
@@ -144,7 +144,7 @@ begin
 
 
 	-- Finite state machine --
-	finiteStateMachine: process(OUT_BUSY, DATA_RDATA, IN_VLD, IN_DATA)
+	finiteStateMachine: process(OUT_BUSY, DATA_RDATA, IN_VLD, IN_DATA, instruction, presentState)
 	begin
 		CODE_EN <= '0';
 		DATA_EN <= '0';
@@ -203,7 +203,7 @@ begin
 						nextState <= FSM_loopEnd;				
 
 					when INS_loopBreak =>
-						nextState <= FSM_loopBreakSkipWait;
+						nextState <= FSM_loopSkipWait;
 						
 					when INS_read =>
 						IN_REQ <= '1';
@@ -240,7 +240,7 @@ begin
 					nextState <= FSM_fetch;
 				end if;
 				
-			-- Pointer Incerement (symbol '>') --
+			-- Pointer Increment (symbol '>') --
 			when FSM_ptrInc =>
 				ptrInc <= '1';
 				
