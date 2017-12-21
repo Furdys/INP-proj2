@@ -91,7 +91,6 @@ architecture behavioral of cpu is
 		FSM_loopEnd,
 		FSM_loopBreakSkipWait,
 		FSM_loopBreakSkip,
-		FSM_loopBreakEnd,
 		FSM_read
 	);
 	signal presentState: state_t;
@@ -152,7 +151,7 @@ begin
 		IN_REQ <= '0';
 		OUT_WE <= '0';
 
-		pcInc <= '0';	-- @todo Default value is 1, change when should be 0
+		pcInc <= '0';
 		pcValSet <= '0';
 		
 		ptrInc <= '0';
@@ -214,61 +213,55 @@ begin
 				end case;
 
 			-- Data Incerement (symbol '+') --
-			when FSM_dataInc =>
-                pcInc <= '1';
-                        
+			when FSM_dataInc =>     
 				DATA_EN <= '1';
 				DATA_RDWR <= '1';
 				DATA_WDATA <= DATA_RDATA + 1;
-                                
+                
+				pcInc <= '1';
 				nextState <= FSM_fetch;
 			
 			-- Data Decerement (symbol '-') --
-			when FSM_dataDec =>
-                pcInc <= '1';
-                        
+			when FSM_dataDec =>        
                 DATA_EN <= '1';   
                 DATA_RDWR <= '1';     
 				DATA_WDATA <= DATA_RDATA - 1;
                                 
+				pcInc <= '1';				
 				nextState <= FSM_fetch;
 
 			-- Character print (symbol '.') --
 			when FSM_print =>
 				if OUT_BUSY = '0' then
-					pcInc <= '1';
-
 					OUT_DATA <= DATA_RDATA;
 					OUT_WE <= '1';
 
+					pcInc <= '1';
 					nextState <= FSM_fetch;
 				end if;
 				
 			-- Pointer Incerement (symbol '>') --
 			when FSM_ptrInc =>
-				pcInc <= '1';
-				
 				ptrInc <= '1';
 				
+				pcInc <= '1';
 				nextState <= FSM_fetch;
 			
 			-- Pointer Decerement (symbol '<') --
 			when FSM_ptrDec =>
-				pcInc <= '1';
-				
 				ptrDec <= '1';
 				
+				pcInc <= '1';
 				nextState <= FSM_fetch;
 
 			-- Reading input (symbol ',') --
 			when FSM_read =>	
-				if IN_VLD = '1' then 
-					pcInc <= '1';
-					
+				if IN_VLD = '1' then 	
 					DATA_EN <= '1';
 					DATA_RDWR <= '1';
 					DATA_WDATA <= IN_DATA;
 					
+					pcInc <= '1';
 					nextState <= FSM_fetch;
 				else
 					IN_REQ <= '1';
@@ -281,58 +274,51 @@ begin
 				if DATA_RDATA = 0 then
 					nextState <= FSM_loopSkipWait;
 				else
-					pcInc <= '1';	
 					pcValLoopStart <= pcVal;
+					
+					pcInc <= '1';	
 					nextState <= FSM_fetch;
 				end if;			
 					
 			-- Skipping instructions inside loop (while symbol ']' is found) --		
 			when FSM_loopSkip =>
 				if instruction = INS_loopEnd then	
-
-					nextState <= FSM_loopEnd;
+					nextState <= FSM_fetch;
 				else
 					nextState <= FSM_loopSkipWait;
 				end if;
 				
 			-- Loading instruction for skipping inside loop --	
 			when FSM_loopSkipWait =>
-				pcInc <= '1';
-				
 				CODE_EN <= '1';
 				
+				pcInc <= '1';
 				nextState <= FSM_loopSkip;
 
 			-- Ending of loop cycle (symbol ']') --
 			when FSM_loopEnd =>
 				if DATA_RDATA = 0 then	-- End cycle
 					pcInc <= '1';
-					
 					nextState <= FSM_fetch;
 				else	-- Run cycle again
 					pcValSet <= '1';
+					
 					nextState <= FSM_fetch;
 				end if;
 				
 			----- Loop break states ----- (Would be better as part of loop states but F#@k FITkit!!!)
 			when FSM_loopBreakSkipWait =>
-					pcInc <= '1';
-					
 					CODE_EN <= '1';
 					
+					pcInc <= '1';
 					nextState <= FSM_loopBreakSkip;
 			
 			when FSM_loopBreakSkip =>
 				if instruction = INS_loopEnd then	
-					nextState <= FSM_loopBreakEnd;
+					nextState <= FSM_fetch;
 				else
 					nextState <= FSM_loopBreakSkipWait;
 				end if;
-
-			when FSM_loopBreakEnd =>	
-					pcInc <= '0';
-					
-					nextState <= FSM_fetch;	
 			
 			-- Other states --
 			when others =>
