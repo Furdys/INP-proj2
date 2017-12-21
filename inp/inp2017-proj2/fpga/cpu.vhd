@@ -91,7 +91,8 @@ architecture behavioral of cpu is
 		FSM_loopEnd,
 		FSM_loopBreakSkipWait,
 		FSM_loopBreakSkip,
-		FSM_loopBreakEnd
+		FSM_loopBreakEnd,
+		FSM_read
 	);
 	signal presentState: state_t;
 	signal nextState: state_t;
@@ -144,7 +145,7 @@ begin
 
 
 	-- Finite state machine --
-	finiteStateMachine: process(presentState, OUT_BUSY, DATA_RDATA, instruction)
+	finiteStateMachine: process(OUT_BUSY, DATA_RDATA, IN_VLD, IN_DATA)
 	begin
 		CODE_EN <= '0';
 		DATA_EN <= '0';
@@ -204,6 +205,10 @@ begin
 
 					when INS_loopBreak =>
 						nextState <= FSM_loopBreakSkipWait;
+						
+					when INS_read =>
+						IN_REQ <= '1';
+						nextState <= FSM_read;
                                                 
 					when others => pcInc <= '1';
 				end case;
@@ -255,6 +260,21 @@ begin
 				
 				nextState <= FSM_fetch;
 
+			-- Reading input (symbol ',') --
+			when FSM_read =>	
+				if IN_VLD = '1' then 
+					pcInc <= '1';
+					
+					DATA_EN <= '1';
+					DATA_RDWR <= '1';
+					DATA_WDATA <= IN_DATA;
+					
+					nextState <= FSM_fetch;
+				else
+					IN_REQ <= '1';
+					nextState <= FSM_read;					
+				end if;				
+				
 			----- Loop states -----			
 			-- Beginning of loop cycle (symbol '[') --
 			when FSM_loopBegin =>
