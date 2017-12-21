@@ -258,6 +258,7 @@ begin
 			-- Beginning of loop cycle (symbol '[') --
 			when FSM_loopBegin =>
 				if DATA_RDATA = 0 then
+					loopBreak <= '1';
 					nextState <= FSM_loopSkipWait;
 				else
 					pcInc <= '1';	
@@ -268,6 +269,7 @@ begin
 			-- Skipping instructions inside loop (while symbol ']' is found) --		
 			when FSM_loopSkip =>
 				if instruction = INS_loopEnd then	
+
 					nextState <= FSM_loopEnd;
 				else
 					nextState <= FSM_loopSkipWait;
